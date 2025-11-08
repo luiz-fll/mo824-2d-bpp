@@ -99,59 +99,37 @@ class GRASP:
 
         return containers_usados
 
-    def debug_checar_duplicatas(self, containers):
-        todos_ids = [it.id for c in containers for it in c.itens_empacotados]
-        total = len(todos_ids)
-        unicos = len(set(todos_ids))
-        if total != unicos:
-            from collections import Counter
-            cnt = Counter(todos_ids)
-            dup = {id_: c for id_, c in cnt.items() if c > 1}
-            print("DEBUG: total items empacotados =", total)
-            print("DEBUG: ids unicos =", unicos)
-            print("DEBUG: duplicados (id:vezes) =", dup)
-            # mostra em qual container cada id aparece
-            aparicoes = {}
-            for idx, c in enumerate(containers, 1):
-                for it in c.itens_empacotados:
-                    aparicoes.setdefault(it.id, []).append(idx)
-            for id_, v in dup.items():
-                print(f"Item {id_} aparece nos containers: {aparicoes[id_]}")
-        else:
-            print("DEBUG: sem duplicatas — total items =", total)
-
     def construir_solucao(self, l_container, a_container, max_containers, itens):
         """
         Utiliza uma variação do FFDH ou FFF, mas com um elemento de aleatoriedade, 
         selecionando itens a partir de uma Lista Restrita de Candidatos (RCL), em
         vez de uma escolha puramente gulosa
         """
-        # monitorar tempo
-        # implementar estrategias de diversificação/intensificação?
         if self.estrategia_construcao == "fff":
             return self.heuristica_fff_rcl(l_container, a_container, max_containers, itens)
         if self.estrategia_construcao == "hff":
             return self.heuristica_hff_rcl(l_container, a_container, max_containers, itens)
         
     def container_tem_itens(self, c):
-        """Checa se o container ainda tem itens."""
-        if hasattr(c, "itens_empacotados"):
+        """Checa se o container (FFF ou HFF) ainda tem itens."""
+        if self.estrategia_construcao == "fff":
             return len(c.itens_empacotados) > 0
-        if hasattr(c, "levels"):
+        if self.estrategia_construcao == "hff":
             return any(len(lvl.itens) > 0 for lvl in c.levels)
         return False
 
     def vizinho_first_improving(self, solucao):
+        """
+        Procura vizinhos que melhorem a solução utilizando abordagem first-improving.
+        """
         melhor = solucao
         melhor_custo = len(solucao)
 
         for i, c1 in enumerate(solucao):
-            # tipo FFF: itens diretos
             if self.estrategia_construcao == "fff":
-                itens_c1 = list(c1.itens_empacotados)
-            # tipo HFF: itens dentro dos levels
+                itens_c1 = list(c1.itens_empacotados) # ContainerFFF
             elif self.estrategia_construcao == "hff":
-                itens_c1 = [it for lvl in c1.levels for it in lvl.itens]
+                itens_c1 = [it for lvl in c1.levels for it in lvl.itens] # ContainerHFF
             else:
                 continue
 
@@ -162,15 +140,14 @@ class GRASP:
                     if time.time() - self.tempo_inicio > self.tempo_max:
                         return melhor
 
+                    # Cópias para não alterar solução
                     c1_temp = copy.deepcopy(c1)
                     c2_temp = copy.deepcopy(c2)
                     item_temp = copy.deepcopy(item)
 
-                    # remove item do container de origem
+                    # Remove item_temp
                     if self.estrategia_construcao == "fff":
-                        c1_temp.itens_empacotados = [
-                            it for it in c1_temp.itens_empacotados if it.id != item_temp.id
-                        ]
+                        c1_temp.itens_empacotados = [it for it in c1_temp.itens_empacotados if it.id != item_temp.id]
                     elif self.estrategia_construcao == "hff":
                         for lvl in c1_temp.levels:
                             lvl.itens = [it for it in lvl.itens if it.id != item_temp.id]
@@ -207,12 +184,10 @@ class GRASP:
         melhor_custo = len(solucao)
 
         for i, c1 in enumerate(solucao):
-            # tipo FFF: itens diretos
             if self.estrategia_construcao == "fff":
-                itens_c1 = list(c1.itens_empacotados)
-            # tipo HFF: itens dentro dos levels
+                itens_c1 = list(c1.itens_empacotados) # ContainerFFF
             elif self.estrategia_construcao == "hff":
-                itens_c1 = [it for lvl in c1.levels for it in lvl.itens]
+                itens_c1 = [it for lvl in c1.levels for it in lvl.itens] # ContainerHFF
             else:
                 continue
 
@@ -223,11 +198,12 @@ class GRASP:
                     if time.time() - self.tempo_inicio > self.tempo_max:
                         return melhor
 
+                    # Cópia dos containers para não alterar solução
                     c1_temp = copy.deepcopy(c1)
                     c2_temp = copy.deepcopy(c2)
                     item_temp = copy.deepcopy(item)
 
-                    # remove item do container de origem
+                    # Remove item_temp
                     if self.estrategia_construcao == "fff":
                         c1_temp.itens_empacotados = [
                             it for it in c1_temp.itens_empacotados if it.id != item_temp.id
@@ -271,14 +247,15 @@ class GRASP:
         dois itens dentro de um bin, ou realocação de itens entre bins) para escapar
         de ótimos locais.
         """
-        # monitorar tempo
-        # best-improving ou first-improving?
         if self.estrategia_busca == "first_improving":
             return self.vizinho_first_improving(solucao)
         if self.estrategia_busca == "best_improving":
             return self.vizinho_best_improving(solucao)
 
     def busca_local(self, solucao):
+        """
+        Realiza uma busca local analisando soluções vizinhas.
+        """
         melhor_vizinho = self.procurar_vizinho_melhor(solucao)
         while len(melhor_vizinho) < len(solucao) and time.time() - self.tempo_inicio < self.tempo_max:
             solucao = melhor_vizinho
@@ -287,12 +264,19 @@ class GRASP:
         return solucao     
 
     def atualizar_solucao(self, solucao):
+        """
+        Verifica se a solução passada é melhor que a melhor solução encontrada até o momento,
+        e atualiza os valores de acordo.
+        """
         if self.melhor_solucao is None:
             self.melhor_solucao = solucao
         elif len(self.melhor_solucao) > len(solucao):
             self.melhor_solucao = solucao
 
     def executar(self, caminho_instancia):
+        """
+        Executa a metaheurística GRASP na instância informada.
+        """
         self.tempo_inicio = time.time()
         l_container, a_container, max_containers, itens = carrega_json.carregar_instancia_json(caminho_instancia)
 
