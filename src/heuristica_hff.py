@@ -1,6 +1,3 @@
-from estrutura import Retangulo
-import sys
-
 class Level:
     def __init__(self, altura, max_largura):
         self.altura = altura
@@ -17,6 +14,14 @@ class Level:
         self.itens.append(item)
         self.largura_ocupada += item.largura
         return True
+    
+    def remover_item_pelo_id(self, id_item):
+        for i, item in enumerate(self.itens):
+            if item.id == id_item:
+                self.itens.pop(i)
+                self.largura_ocupada -= item.largura
+                return True
+        return False
 
     def __repr__(self):
         return f"Level(h={self.altura}, w_usada={self.largura_ocupada}/{self.max_largura}, itens={len(self.itens)})"
@@ -31,6 +36,15 @@ class ContainerHFF:
 
     def altura_disponivel(self):
         return self.altura_max - self.altura_ocupada
+    
+    def remover_item_pelo_id(self, id_item):
+        for i, level in enumerate(self.levels):
+            if level.remover_item_pelo_id(id_item):
+                if len(level.itens) == 0:
+                    self.levels.pop(i)
+                    self.altura_ocupada -= level.altura
+                return True
+        return False
 
     def tentar_adicionar_level(self, level):
         if level.altura > self.altura_disponivel():

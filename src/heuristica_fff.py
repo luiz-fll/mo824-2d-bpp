@@ -1,5 +1,3 @@
-from estrutura import Retangulo
-
 class ContainerFFF:
     """
     Implementação do Container para a heurística FFF (pontos de inserção).
@@ -48,6 +46,29 @@ class ContainerFFF:
                 self.adicionar_item(item, x, y)
                 return True 
         return False 
+    
+    def recalcular_pontos_insercao(self):
+        """Reconstrói os pontos de inserção do zero. Necessário após remoções."""
+        self.pontos_insercao = [(0, 0)]
+        itens_atuais = list(self.itens_empacotados)
+        posicoes_atuais = list(self.posicoes_itens)
+        
+        self.itens_empacotados = []
+        self.posicoes_itens = []
+        
+        for i, item in enumerate(itens_atuais):
+            # Reinsere para atualizar os pontos corretamente
+            self.adicionar_item(item, posicoes_atuais[i][0], posicoes_atuais[i][1])
+
+    def remover_item_pelo_id(self, id_item):
+        """Remove item e atualiza pontos de inserção."""
+        for i, item in enumerate(self.itens_empacotados):
+            if item.id == id_item:
+                self.itens_empacotados.pop(i)
+                self.posicoes_itens.pop(i)
+                self.recalcular_pontos_insercao()
+                return True
+        return False
 
 def heuristica_fff(l_container, a_container, max_containers, itens):
     itens.sort(key=lambda item: (item.altura, item.largura), reverse=True)
