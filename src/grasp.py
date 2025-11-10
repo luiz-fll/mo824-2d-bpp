@@ -10,11 +10,13 @@ class GRASP:
     """
     Classe que implementa a metaheurística GRASP.
     """
-    def __init__(self, iteracoes_max, tempo_max, estrategia_construcao="hff", estrategia_busca="best_improving", alpha=0.2, limite_sem_melhora=20):
+    def __init__(self, iteracoes_max, tempo_max, estrategia_construcao="hff", estrategia_busca="best_improving", alpha=0.2, random_seed=42, limite_sem_melhora=10):
         self.iteracoes_max = iteracoes_max
         self.tempo_max = tempo_max
         self.estrategia_construcao = estrategia_construcao.lower()
         self.estrategia_busca = estrategia_busca.lower()
+
+        random.seed(random_seed)
         
         self.alpha = alpha
         self.iteracoes_sem_melhora = 0
@@ -128,12 +130,10 @@ class GRASP:
             containers_usados.append(cont_atual)
 
             while True:
-                # Filtra apenas itens que cabem na altura restante do container atual
                 candidatos = [it for it in itens_restantes if it.altura <= cont_atual.altura_disponivel()]
                 if not candidatos:
-                    break # Container cheio (verticalmente)
+                    break
 
-                # RCL baseada na ALTURA (padrão para level packing)
                 alturas = [it.altura for it in candidatos]
                 melhor, pior = max(alturas), min(alturas)
                 limite = melhor - self.alpha * (melhor - pior)
@@ -141,21 +141,17 @@ class GRASP:
 
                 if not rcl: break
                 
-                # Escolhe item para iniciar um novo nível
                 item_escolhido = random.choice(rcl)
                 itens_restantes.remove(item_escolhido)
 
                 novo_level = Level(item_escolhido.altura, l_container)
                 novo_level.tentar_adicionar_item(item_escolhido)
 
-                # Preenche o resto do nível (First-Fit na largura)
-                # Aqui pode ser guloso determinístico mesmo, ou também aleatorizado se quiser.
                 for i in range(len(itens_restantes) - 1, -1, -1):
                     if novo_level.tentar_adicionar_item(itens_restantes[i]):
                         itens_restantes.pop(i)
 
                 if not cont_atual.tentar_adicionar_level(novo_level):
-                    # Não deveria acontecer devido ao filtro 'candidatos', mas por segurança:
                     break 
         
         return containers_usados
@@ -167,67 +163,102 @@ class GRASP:
             return self.heuristica_hff_rcl(l_c, a_c, max_c, itens)
         raise ValueError("Estratégia de construção desconhecida.")
 
+    def _obter_info_posicao(self, container, item_alvo):
+        """Retorna dados necessários para restaurar o item na posição exata."""
+        if isinstance(container, ContainerFFF):
+            for i, item in enumerate(container.itens_empacotados):
+                if item.id == item_alvo.id:
+                    return container.posicoes_itens[i] # Retorna tupla (x, y)
+        elif isinstance(container, ContainerHFF):
+             for i_lvl, lvl in enumerate(container.levels):
+                 for item in lvl.itens:
+                     if item.id == item_alvo.id:
+                         # Retorna (indice_nivel, item) para saber onde reinserir
+                         return (i_lvl, item)
+        return None
+
+    def _restaurar_item_container(self, container, item, info_posicao):
+        """Força a re-inserção do item na posição original (Undo)."""
+        if isinstance(container, ContainerFFF):
+            x, y = info_posicao
+            # Usa o método que força a posição e atualiza os pontos
+            container.adicionar_item(item, x, y)
+            return True
+            
+        elif isinstance(container, ContainerHFF):
+            i_lvl_orig, _ = info_posicao
+            # Tenta colocar de volta no nível original se ele ainda existir
+            if i_lvl_orig < len(container.levels):
+                 lvl = container.levels[i_lvl_orig]
+                 # Se a altura bater (nível não foi recriado com outra altura), tenta reinserir
+                 if lvl.altura == item.altura and (lvl.largura_ocupada + item.largura <= lvl.max_largura):
+                     lvl.itens.append(item)
+                     lvl.largura_ocupada += item.largura
+                     return True
+
+            # Fallback: se o nível original mudou muito ou sumiu, usa inserção padrão HFF
+            return self._adicionar_item_container(container, item)
+
     def procurar_vizinho(self, solucao):
         """
-        Explora a vizinhança 'Shift' aplicando e revertendo movimentos na própria solução.
+        Busca local 'Shift' sem deepcopy, usando reversão de movimentos.
         """
-        # Melhor custo inicial é o da solução atual
         melhor_custo = self._get_custo(solucao)
-        # Se for 'best_improving', precisaremos salvar uma cópia da melhor encontrada
         melhor_vizinho_snapshot = None 
-        melhorou_algo = False
-
+        melhorou = False
         tipo_busca = "first" if self.estrategia_busca == "first_improving" else "best"
 
-        for i_origem, c_origem in enumerate(solucao):
-            itens_origem = list(self._get_itens(c_origem))
-            
+        # Itera sobre cópias das listas para não se perder com índices mudando
+        indices_containers = list(range(len(solucao)))
+        
+        for i_orig in indices_containers:
+            c_orig = solucao[i_orig]
+            itens_origem = list(self._get_itens(c_orig)) # Cópia da lista de itens
+
             for item in itens_origem:
                 if time.time() - self.tempo_inicio > self.tempo_max:
                     return melhor_vizinho_snapshot if melhor_vizinho_snapshot else solucao
 
-                # Loop interno: Container de Destino
-                for i_destino, c_destino in enumerate(solucao):
-                    if i_origem == i_destino: continue
+                for i_dest in indices_containers:
+                    if i_orig == i_dest: continue
+                    c_dest = solucao[i_dest]
 
-                    # --- TENTATIVA DE MOVIMENTO (APPLY) ---
-                    # 1. Tenta adicionar no destino
-                    if self._adicionar_item_container(c_destino, item):
-                        c_origem.remover_item_pelo_id(item.id)
-
+                    # 1. Salva estado para reversão (UNDO info)
+                    info_origem = self._obter_info_posicao(c_orig, item)
+                    
+                    # 2. Tenta Movimento (APPLY)
+                    # Tenta adicionar no destino PRIMEIRO. Se falhar, nem remove da origem.
+                    if self._adicionar_item_container(c_dest, item):
+                        c_orig.remover_item_pelo_id(item.id) # Remove da origem
+                        
                         # 3. Avalia
-                        # Precisamos filtrar containers vazios temporariamente para calcular o custo real
-                        solucao_temp = [c for c in solucao if len(self._get_itens(c)) > 0]
-                        novo_custo = self._get_custo(solucao_temp)
+                        # Filtra vazios apenas para o cálculo do custo
+                        sol_temp = [c for c in solucao if len(self._get_itens(c)) > 0]
+                        novo_custo = self._get_custo(sol_temp)
 
                         if novo_custo < melhor_custo:
-                            # ENCONTROU MELHORA
                             melhor_custo = novo_custo
-                            melhorou_algo = True
+                            melhorou = True
                             
+                            # Snapshot da melhor solução encontrada
+                            # Precisamos de deepcopy AQUI para salvar esse estado vencedor
+                            # antes de reverter para continuar a busca (se for best improving)
+                            melhor_vizinho_snapshot = copy.deepcopy(sol_temp)
+
                             if tipo_busca == "first":
-                                # Se é first improving, removemos definitivamente os vazios e retornamos
-                                # Não precisamos de deepcopy aqui pois vamos retornar essa solução modificada
-                                solucao[:] = [c for c in solucao if len(self._get_itens(c)) > 0]
-                                return solucao
-                            else:
-                                # Se é best improving, precisamos salvar esse estado (snapshot)
-                                # porque vamos REVERTER para continuar procurando outros vizinhos.
-                                melhor_vizinho_snapshot = copy.deepcopy(solucao_temp)
+                                # Se achou e é first, restaura o estado original da 'solucao' 
+                                # para não quebrá-la externamente, e retorna o snapshot.
+                                # (Ou, opcionalmente, retorna sol_temp e assume que o caller vai usar)
+                                # Vamos reverter para manter consistência do loop se ele continuasse.
+                                c_dest.remover_item_pelo_id(item.id)
+                                self._restaurar_item_container(c_orig, item, info_origem)
+                                return melhor_vizinho_snapshot
 
-                        # --- REVERSÃO (UNDO) ---
-                        # Sempre reverte se não retornou imediatamente (caso do best improving ou falha)
-                        c_destino.remover_item_pelo_id(item.id)
-                        # Tenta colocar de volta na origem. 
-                        # NOTA: Pode não voltar para a EXATA mesma posição se houver múltiplas opções,
-                        # mas em heurísticas isso é geralmente aceitável.
-                        if not self._adicionar_item_container(c_origem, item):
-                             print(f"ERRO CRÍTICO: Não foi possível reverter item {item.id} para container {c_origem.id}")
+                        # 4. Reversão Obrigatória (UNDO) para continuar a busca
+                        c_dest.remover_item_pelo_id(item.id)
+                        self._restaurar_item_container(c_orig, item, info_origem)
 
-        if melhorou_algo and melhor_vizinho_snapshot:
-             return melhor_vizinho_snapshot
-             
-        return solucao
+        return melhor_vizinho_snapshot if melhorou else solucao
 
     def busca_local(self, solucao_inicial):
 
@@ -277,7 +308,7 @@ class GRASP:
 if __name__ == "__main__":
     arquivo = "in/650.json" 
     
-    grasp = GRASP(iteracoes_max=10000, tempo_max=600, estrategia_construcao="hff", estrategia_busca="first_improving", alpha=0.2)
+    grasp = GRASP(iteracoes_max=10000, tempo_max=600, estrategia_construcao="fff", estrategia_busca="first_improving", alpha=0.2)
     
     melhor_sol, iteracao = grasp.executar(arquivo)
     
