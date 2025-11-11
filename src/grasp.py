@@ -168,12 +168,11 @@ class GRASP:
         if isinstance(container, ContainerFFF):
             for i, item in enumerate(container.itens_empacotados):
                 if item.id == item_alvo.id:
-                    return container.posicoes_itens[i] # Retorna tupla (x, y)
+                    return container.posicoes_itens[i]
         elif isinstance(container, ContainerHFF):
              for i_lvl, lvl in enumerate(container.levels):
                  for item in lvl.itens:
                      if item.id == item_alvo.id:
-                         # Retorna (indice_nivel, item) para saber onde reinserir
                          return (i_lvl, item)
         return None
 
@@ -190,13 +189,11 @@ class GRASP:
             # Tenta colocar de volta no nível original se ele ainda existir
             if i_lvl_orig < len(container.levels):
                  lvl = container.levels[i_lvl_orig]
-                 # Se a altura bater (nível não foi recriado com outra altura), tenta reinserir
                  if lvl.altura == item.altura and (lvl.largura_ocupada + item.largura <= lvl.max_largura):
                      lvl.itens.append(item)
                      lvl.largura_ocupada += item.largura
                      return True
 
-            # Fallback: se o nível original mudou muito ou sumiu, usa inserção padrão HFF
             return self._adicionar_item_container(container, item)
 
     def procurar_vizinho(self, solucao):
@@ -208,12 +205,11 @@ class GRASP:
         melhorou = False
         tipo_busca = "first" if self.estrategia_busca == "first_improving" else "best"
 
-        # Itera sobre cópias das listas para não se perder com índices mudando
         indices_containers = list(range(len(solucao)))
         
         for i_orig in indices_containers:
             c_orig = solucao[i_orig]
-            itens_origem = list(self._get_itens(c_orig)) # Cópia da lista de itens
+            itens_origem = list(self._get_itens(c_orig))
 
             for item in itens_origem:
                 if time.time() - self.tempo_inicio > self.tempo_max:
@@ -223,16 +219,11 @@ class GRASP:
                     if i_orig == i_dest: continue
                     c_dest = solucao[i_dest]
 
-                    # 1. Salva estado para reversão (UNDO info)
                     info_origem = self._obter_info_posicao(c_orig, item)
                     
-                    # 2. Tenta Movimento (APPLY)
-                    # Tenta adicionar no destino PRIMEIRO. Se falhar, nem remove da origem.
                     if self._adicionar_item_container(c_dest, item):
-                        c_orig.remover_item_pelo_id(item.id) # Remove da origem
+                        c_orig.remover_item_pelo_id(item.id) 
                         
-                        # 3. Avalia
-                        # Filtra vazios apenas para o cálculo do custo
                         sol_temp = [c for c in solucao if len(self._get_itens(c)) > 0]
                         novo_custo = self._get_custo(sol_temp)
 
@@ -240,21 +231,13 @@ class GRASP:
                             melhor_custo = novo_custo
                             melhorou = True
                             
-                            # Snapshot da melhor solução encontrada
-                            # Precisamos de deepcopy AQUI para salvar esse estado vencedor
-                            # antes de reverter para continuar a busca (se for best improving)
                             melhor_vizinho_snapshot = copy.deepcopy(sol_temp)
 
                             if tipo_busca == "first":
-                                # Se achou e é first, restaura o estado original da 'solucao' 
-                                # para não quebrá-la externamente, e retorna o snapshot.
-                                # (Ou, opcionalmente, retorna sol_temp e assume que o caller vai usar)
-                                # Vamos reverter para manter consistência do loop se ele continuasse.
                                 c_dest.remover_item_pelo_id(item.id)
                                 self._restaurar_item_container(c_orig, item, info_origem)
                                 return melhor_vizinho_snapshot
 
-                        # 4. Reversão Obrigatória (UNDO) para continuar a busca
                         c_dest.remover_item_pelo_id(item.id)
                         self._restaurar_item_container(c_orig, item, info_origem)
 
@@ -280,6 +263,7 @@ class GRASP:
     def executar(self, caminho_instancia):
         self.tempo_inicio = time.time()
         l_c, a_c, max_c, itens = carregar_instancia_json(caminho_instancia)
+        tempo_melhor_solucao = self.tempo_inicio
 
         iteracao = 0
         while iteracao < self.iteracoes_max:
@@ -292,6 +276,7 @@ class GRASP:
             if self.melhor_solucao is None or len(solucao_refinada) < len(self.melhor_solucao):
                 self.melhor_solucao = solucao_refinada
                 self.iteracoes_sem_melhora = 0
+                tempo_melhor_solucao = time.time()
                 print(f"[{time.time()-self.tempo_inicio:.2f}s] Nova melhor solução: {len(self.melhor_solucao)} bins (Iter {iteracao})")
             else:
                 self.iteracoes_sem_melhora += 1
@@ -302,7 +287,7 @@ class GRASP:
                 self.iteracoes_sem_melhora = 0
 
 
-        return self.melhor_solucao, iteracao
+        return self.melhor_solucao, iteracao, tempo_melhor_solucao - self.tempo_inicio
 
 
 if __name__ == "__main__":

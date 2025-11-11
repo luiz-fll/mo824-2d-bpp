@@ -86,6 +86,11 @@ class ContainerFFF:
         return False
 
 def heuristica_fff(l_container, a_container, max_containers, itens):
+    for item in itens:
+        if item.largura > l_container or item.altura > a_container:
+            print(f"ERRO: Item {item.id} (L:{item.largura}, A:{item.altura}) não cabe no container (L:{l_container}, A:{a_container})")
+            return None
+
     itens.sort(key=lambda item: (item.altura, item.largura), reverse=True)
     
     containers_usados = []

@@ -12,7 +12,7 @@ def calcular_lower_bound(l_container, a_container, itens):
     return math.ceil(area_total_itens / area_bin)
 
 if __name__ == "__main__":
-    nome_arquivo = "in/650.json"
+    nome_arquivo = "in/5.json"
     dados = carregar_instancia_json(nome_arquivo)
     
     if dados:

@@ -22,17 +22,18 @@ def salvar_linha_csv(nome_arquivo, dados):
 if __name__ == "__main__":
     
     instance_list = [
-        "in/1.json", "in/10.json", "in/20.json", "in/21.json",
-        "in/40.json", "in/60.json", "in/70.json", "in/100.json",
-        "in/140.json", "in/200.json", "in/250.json", "in/500.json",
-        "in/650.json", "in/800.json", "in/900.json"
+        "in/1.json", "in/3.json", "in/4.json", "in/5.json", "in/6.json", "in/7.json", "in/10.json", "in/20.json", "in/21.json", "in/40.json", "in/60.json", "in/70.json", 
+        "in/100.json", "in/140.json", "in/200.json", "in/250.json", "in/490.json", "in/491.json", "in/492.json", "in/493.json", "in/494.json", "in/495.json", "in/496.json", 
+        "in/497.json", "in/498.json", "in/499.json", "in/500.json", "in/650.json", "in/700.json", "in/701.json", "in/702.json", "in/703.json", "in/704.json", "in/705.json", 
+        "in/706.json", "in/707.json", "in/708.json", "in/709.json", "in/800.json", "in/890.json", "in/891.json", "in/892.json", "in/893.json", "in/894.json", "in/895.json", 
+        "in/896.json", "in/897.json", "in/898.json", "in/899.json", "in/900.json"
     ]
 
     ARQ_HEURISTICAS = "results/resultados_heuristicas.csv"
     ARQ_GRASP = "results/resultados_grasp.csv"
 
     inicializar_csv(ARQ_HEURISTICAS, ["Instancia", "Metodo", "Bins", "Tempo(s)"])
-    inicializar_csv(ARQ_GRASP, ["Instancia", "Construcao", "Busca", "Bins", "Tempo(s)", "Iteracoes_Totais"])
+    inicializar_csv(ARQ_GRASP, ["Instancia", "Construcao", "Busca", "Bins", "Tempo(s)", "Tempo(s) da melhor solução", "Iteracoes_Totais"])
 
     ITERACOES_MAX = 10000
     TEMPO_MAX = 600 
@@ -58,8 +59,17 @@ if __name__ == "__main__":
         
         # FFF
         start = time.time()
-        bins_fff = len(heuristica_fff(l_c, a_c, max_c, itens))
+        cont_fff = heuristica_fff(l_c, a_c, max_c, get_dados()[3])
         tempo_fff = time.time() - start
+
+        if cont_fff is None:
+             print(f"  [FFF] FALHA: Instância inviável (item muito grande).")
+             salvar_linha_csv(ARQ_HEURISTICAS, [instance_name, "FFF", "INVIÁVEL", f"{tempo_fff:.4f}"])
+             # Se falhou no FFF por tamanho de item, falhará em todos. Pula a instância.
+             print("  -> Pulando restante da instância devido a inviabilidade.")
+             continue
+
+        bins_fff = len(cont_fff)
         salvar_linha_csv(ARQ_HEURISTICAS, [instance_name, "FFF", bins_fff, f"{tempo_fff:.4f}"])
         print(f"  [FFF] {bins_fff} bins em {tempo_fff:.4f}s")
 
@@ -81,7 +91,7 @@ if __name__ == "__main__":
             print(f"  -> {nome_grasp}...", end="", flush=True)
             
             grasp = GRASP(ITERACOES_MAX, TEMPO_MAX, constr, busca, ALPHA)
-            melhor_sol, iteracoes = grasp.executar(instance_name)
+            melhor_sol, iteracoes, tempo_melhor_solucao = grasp.executar(instance_name)
             
             tempo_total = time.time() - grasp.tempo_inicio
             num_bins = len(melhor_sol) if melhor_sol else "N/A"
@@ -92,6 +102,7 @@ if __name__ == "__main__":
                 busca, 
                 num_bins, 
                 f"{tempo_total:.2f}", 
+                tempo_melhor_solucao,
                 iteracoes
             ])
             print(f" Concluído: {num_bins} bins em {tempo_total:.2f}s ({iteracoes} iterações)")
