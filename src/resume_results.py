@@ -54,13 +54,23 @@ def consolidar_resultados(arq_lb, arq_heur, arq_pli, arq_saida):
         print(f"Aviso: Arquivo '{arq_pli}' não encontrado. Colunas 'PLI' e 'Bins' ficarão vazias.")
 
     colunas_saida = ['Instância', 'FFF', 'HFF', 'PLI', 'Limite teórico']
+
+    def extrair_numero_instancia(item_dicionario):
+        instancia_str = item_dicionario[0] 
+        try:
+            nome_arquivo = os.path.basename(instancia_str)
+            numero_str = os.path.splitext(nome_arquivo)[0]
+            return int(numero_str)
+        except ValueError:
+            print(f"Aviso: Não foi possível extrair número de '{instancia_str}'.")
+            return float('inf') 
     
     try:
         with open(arq_saida, mode='w', newline='', encoding='utf-8') as f:
             writer = csv.DictWriter(f, fieldnames=colunas_saida)
             writer.writeheader()
             
-            for instancia, dados in sorted(resultados.items()):
+            for instancia, dados in sorted(resultados.items(), key=extrair_numero_instancia):
                 linha_saida = {
                     'Instância': instancia,
                     'FFF': dados.get('FFF', 'N/A'),
