@@ -260,10 +260,13 @@ class GRASP:
         return solucao_atual
 
 
-    def executar(self, caminho_instancia):
+    def executar(self, caminho_instancia, valor_alvo=0):
         self.tempo_inicio = time.time()
         l_c, a_c, max_c, itens = carregar_instancia_json(caminho_instancia)
         tempo_melhor_solucao = self.tempo_inicio
+
+        atingiu_valor_alvo = False
+        tempo_ate_alvo = 0
 
         iteracao = 0
         while iteracao < self.iteracoes_max:
@@ -272,6 +275,12 @@ class GRASP:
             iteracao += 1
             solucao_inicial = self.construir_solucao(l_c, a_c, max_c, itens)
             solucao_refinada = self.busca_local(solucao_inicial)
+
+            if valor_alvo != 0 and len(solucao_refinada) <= valor_alvo and not atingiu_valor_alvo:
+                self.melhor_solucao = solucao_refinada
+                atingiu_valor_alvo = True
+                tempo_ate_alvo = time.time() - self.tempo_inicio
+                break
             
             if self.melhor_solucao is None or len(solucao_refinada) < len(self.melhor_solucao):
                 self.melhor_solucao = solucao_refinada
@@ -280,14 +289,16 @@ class GRASP:
                 print(f"[{time.time()-self.tempo_inicio:.2f}s] Nova melhor solução: {len(self.melhor_solucao)} bins (Iter {iteracao})")
             else:
                 self.iteracoes_sem_melhora += 1
-                print(f"[{time.time()-self.tempo_inicio:.2f}s] Iterações sem melhora: {self.iteracoes_sem_melhora}")
                 
             if self.iteracoes_sem_melhora >= self.limite_sem_melhora:
                 self.alpha = min(1.0, self.alpha + 0.1)
                 self.iteracoes_sem_melhora = 0
 
+        if valor_alvo == 0:
+            return self.melhor_solucao, iteracao, tempo_melhor_solucao - self.tempo_inicio
+        else:
+            return self.melhor_solucao, iteracao, valor_alvo, atingiu_valor_alvo, tempo_ate_alvo
 
-        return self.melhor_solucao, iteracao, tempo_melhor_solucao - self.tempo_inicio
 
 
 if __name__ == "__main__":
