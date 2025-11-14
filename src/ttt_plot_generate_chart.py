@@ -77,7 +77,7 @@ def generate_ttt_plots_from_csv(csv_path: str, output_dir: str):
         
         plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
         
-        plt.tight_layout(rect=[0, 0, 0.85, 1]) 
+        plt.tight_layout(rect=[0, 0, 1, 1]) 
         
         base_name = os.path.basename(instance_name) 
         file_stem = os.path.splitext(base_name)[0]
